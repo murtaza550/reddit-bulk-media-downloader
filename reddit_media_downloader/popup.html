@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Reddit Media Downloader</title>
+  <style>
+    body {
+      width: 300px;
+      font-family: Arial, sans-serif;
+      padding: 15px;
+    }
+    h2 {
+      color: #ff4500;
+      margin-top: 0;
+    }
+    button {
+      background-color: #ff4500;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      width: 100%;
+      margin-top: 10px;
+    }
+    button:hover {
+      background-color: #e03d00;
+    }
+    .section {
+      margin-bottom: 15px;
+    }
+    .description {
+      color: #666;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .stats {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h2>Reddit Media Downloader</h2>
+  
+  <div class="section">
+    <div class="description">
+      Download high-quality images, videos, and GIFs from Reddit posts.
+    </div>
+  </div>
+  
+  <div class="section">
+    <button id="activateBtn">Enable Selection Mode</button>
+  </div>
+  
+  <div class="stats" id="statsArea">
+    <div id="selectionStatus">No posts selected</div>
+    <div id="downloadStatus" style="display: none;">Downloads: <span id="downloadCount">0</span></div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
