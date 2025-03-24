@@ -24,6 +24,66 @@ function initialize() {
     }
     // Don't return true since we're sending an immediate response
   });
+  
+  // Inject global styles
+  injectGlobalStyles();
+  
+  // Try injecting into shadow DOM
+  setTimeout(tryInjectingIntoShadowDOM, 2000);
+}
+
+// Inject global styles
+function injectGlobalStyles() {
+  const styleSheet = document.createElement('style');
+  styleSheet.textContent = `
+    /* Ensure our checkboxes stand out */
+    .reddit-media-dl-checkbox {
+      width: 24px !important;
+      height: 24px !important;
+      cursor: pointer !important;
+      opacity: 1 !important;
+      accent-color: #ff4500 !important;
+    }
+    
+    .reddit-media-dl-checkbox-wrapper {
+      position: absolute !important;
+      top: 15px !important;
+      left: 15px !important;
+      z-index: 10000 !important;
+      background-color: rgba(255, 69, 0, 0.8) !important;
+      padding: 5px !important;
+      border-radius: 4px !important;
+      display: block !important;
+    }
+    
+    /* Target shreddit-post shadow DOM via CSS containment piercing (works in some browsers) */
+    shreddit-post::part(container) {
+      position: relative !important;
+    }
+  `;
+  document.head.appendChild(styleSheet);
+  
+  // Additional approach for shadow DOM: inject into each shreddit-post
+  const shredditPosts = document.querySelectorAll('shreddit-post');
+  shredditPosts.forEach(post => {
+    if (post.shadowRoot) {
+      const shadowStyle = document.createElement('style');
+      shadowStyle.textContent = `
+        :host {
+          position: relative !important;
+        }
+        
+        div:first-child {
+          position: relative !important;
+        }
+      `;
+      try {
+        post.shadowRoot.appendChild(shadowStyle);
+      } catch (e) {
+        console.log('Could not inject style into shadow DOM:', e);
+      }
+    }
+  });
 }
 
 // Activate selection mode
@@ -49,7 +109,61 @@ function activateSelectionMode() {
     
     // Update UI
     updateSelectionUI();
+    
+    // Try injecting into shadow DOM
+    tryInjectingIntoShadowDOM();
   }, 500); // Small delay to ensure DOM is fully loaded
+}
+
+// Try injecting into shadow DOM
+function tryInjectingIntoShadowDOM() {
+  const posts = document.querySelectorAll('shreddit-post');
+  posts.forEach(post => {
+    if (post.shadowRoot && !post.querySelector('.reddit-media-dl-checkbox')) {
+      const container = post.shadowRoot.querySelector('div');
+      if (container) {
+        // Create checkbox wrapper
+        const checkboxWrapper = document.createElement('div');
+        checkboxWrapper.className = 'reddit-media-dl-checkbox-wrapper';
+        checkboxWrapper.style.position = 'absolute';
+        checkboxWrapper.style.top = '15px';
+        checkboxWrapper.style.left = '15px';
+        checkboxWrapper.style.zIndex = '10000';
+        checkboxWrapper.style.backgroundColor = 'rgba(255, 69, 0, 0.8)';
+        checkboxWrapper.style.padding = '5px';
+        checkboxWrapper.style.borderRadius = '4px';
+        
+        // Create checkbox
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'reddit-media-dl-checkbox';
+        checkbox.style.width = '24px';
+        checkbox.style.height = '24px';
+        checkbox.style.cursor = 'pointer';
+        checkbox.style.opacity = '1';
+        checkbox.style.margin = '0';
+        checkbox.style.accentColor = '#ff4500';
+        checkbox.dataset.postId = getPostId(post);
+        
+        // Add event listener to checkbox
+        checkbox.addEventListener('change', function() {
+          if (this.checked) {
+            selectedPosts.add(this.dataset.postId);
+          } else {
+            selectedPosts.delete(this.dataset.postId);
+          }
+          updateSelectionUI();
+        });
+        
+        // Add checkbox to wrapper
+        checkboxWrapper.appendChild(checkbox);
+        
+        // Add to container
+        container.style.position = 'relative';
+        container.prepend(checkboxWrapper);
+      }
+    }
+  });
 }
 
 // Find Reddit posts using various selectors to accommodate different Reddit layouts
@@ -136,21 +250,28 @@ function addCheckboxesToPosts() {
     // Create checkbox wrapper
     const checkboxWrapper = document.createElement('div');
     checkboxWrapper.className = 'reddit-media-dl-checkbox-wrapper';
+    
+    // Set positioning styles directly on wrapper
     checkboxWrapper.style.position = 'absolute';
-    checkboxWrapper.style.top = '5px';
-    checkboxWrapper.style.left = '5px';
+    checkboxWrapper.style.top = '15px';
+    checkboxWrapper.style.left = '15px';
     checkboxWrapper.style.zIndex = '10000';
+    checkboxWrapper.style.backgroundColor = 'rgba(255, 69, 0, 0.8)'; // Reddit orange with transparency
+    checkboxWrapper.style.padding = '5px';
+    checkboxWrapper.style.borderRadius = '4px';
     
     // Create checkbox
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.className = 'reddit-media-dl-checkbox';
+    
+    // Set enhanced styles directly on checkbox
     checkbox.style.width = '24px';
     checkbox.style.height = '24px';
     checkbox.style.cursor = 'pointer';
-    checkbox.style.opacity = '0.9';
-    checkbox.style.backgroundColor = 'white';
-    checkbox.style.border = '2px solid #ff4500';
+    checkbox.style.opacity = '1';
+    checkbox.style.margin = '0';
+    checkbox.style.accentColor = '#ff4500'; // Reddit orange for checked state
     checkbox.dataset.postId = getPostId(post);
     
     // Add event listener to checkbox
@@ -163,16 +284,32 @@ function addCheckboxesToPosts() {
       updateSelectionUI();
     });
     
-    // Add checkbox to post
+    // Add checkbox to wrapper
     checkboxWrapper.appendChild(checkbox);
     
-    // Make sure the post has position relative for absolute positioning of checkbox
-    const computedStyle = window.getComputedStyle(post);
-    if (computedStyle.position === 'static') {
+    // For shreddit-post elements, we need to handle shadow DOM
+    if (post.tagName === 'SHREDDIT-POST') {
+      // First try to access the shadow root if possible
+      if (post.shadowRoot) {
+        const container = post.shadowRoot.querySelector('div');
+        if (container) {
+          container.style.position = 'relative';
+          container.prepend(checkboxWrapper);
+          return;
+        }
+      }
+      
+      // If we can't access the shadow DOM or find container, append to the post itself
       post.style.position = 'relative';
+      post.prepend(checkboxWrapper);
+    } else {
+      // For regular elements, make sure they're positioned for absolute children
+      const computedStyle = window.getComputedStyle(post);
+      if (computedStyle.position === 'static') {
+        post.style.position = 'relative';
+      }
+      post.prepend(checkboxWrapper);
     }
-    
-    post.prepend(checkboxWrapper);
   });
 }
 
@@ -336,17 +473,149 @@ async function getSelectedPostsMedia() {
 // Extract media URLs from a post
 function extractMediaFromPost(postElement) {
   const mediaUrls = [];
+  console.log("Extracting media from post:", postElement.tagName);
   
+  // Handle shadow DOM for shreddit-post elements
+  if (postElement.tagName === 'SHREDDIT-POST') {
+    if (postElement.shadowRoot) {
+      console.log("Found shadow root, extracting from shadow DOM");
+      
+      // Extract images from shadow DOM
+      const shadowImages = postElement.shadowRoot.querySelectorAll('img');
+      console.log(`Found ${shadowImages.length} images in shadow DOM`);
+      
+      shadowImages.forEach(img => {
+        // Skip small icons and UI elements
+        if (img.width > 100 && img.height > 100 || img.src.includes('preview.redd.it') || img.src.includes('i.redd.it')) {
+          console.log("Found image in shadow DOM:", img.src);
+          
+          // Get highest quality version
+          let url = img.src;
+          url = url.replace(/\?.*$/, ''); // Remove query parameters
+          
+          // Fix Reddit's own image URLs for highest quality
+          if (url.includes('preview.redd.it')) {
+            url = url.replace(/preview\.redd\.it/, 'i.redd.it');
+          }
+          
+          mediaUrls.push({url, type: 'image', filename: getFilenameFromUrl(url)});
+        }
+      });
+      
+      // Extract videos from shadow DOM
+      const shadowVideos = postElement.shadowRoot.querySelectorAll('video');
+      console.log(`Found ${shadowVideos.length} videos in shadow DOM`);
+      
+      shadowVideos.forEach(video => {
+        // Try to get source elements
+        const sources = video.querySelectorAll('source');
+        if (sources.length > 0) {
+          console.log("Found video source in shadow DOM:", sources[0].src);
+          let url = sources[0].src;
+          url = url.replace(/\?.*$/, ''); // Remove query parameters
+          mediaUrls.push({url, type: 'video', filename: getFilenameFromUrl(url)});
+        } else if (video.src) {
+          console.log("Found video src in shadow DOM:", video.src);
+          let url = video.src;
+          url = url.replace(/\?.*$/, ''); // Remove query parameters
+          mediaUrls.push({url, type: 'video', filename: getFilenameFromUrl(url)});
+        }
+      });
+      
+      // If no media found directly, try to find the post URL for JSON approach
+      if (mediaUrls.length === 0) {
+        // Look for a permalink in the shadow DOM
+        const permalinkElements = postElement.shadowRoot.querySelectorAll('a[href*="/comments/"]');
+        for (const link of permalinkElements) {
+          if (link.href && link.href.includes('/comments/')) {
+            console.log("Found post URL in shadow DOM:", link.href);
+            mediaUrls.push({
+              url: link.href + '.json',
+              type: 'reddit-video',
+              filename: 'reddit_video_' + Date.now() + '.mp4'
+            });
+            break;
+          }
+        }
+      }
+      
+      // If still no media, try to get post ID from element and construct URL
+      if (mediaUrls.length === 0 && postElement.id) {
+        const postId = postElement.id;
+        console.log("Using post ID to construct URL:", postId);
+        // Construct a JSON URL from the post ID
+        const jsonUrl = `https://www.reddit.com/comments/${postId}.json`;
+        mediaUrls.push({
+          url: jsonUrl,
+          type: 'reddit-video',
+          filename: 'reddit_video_' + Date.now() + '.mp4'
+        });
+      }
+    } else {
+      console.log("Shadow root not accessible");
+    }
+    
+    // If we couldn't extract from shadow DOM directly, try another approach
+    // Reddit puts post data in a data-post attribute
+    if (mediaUrls.length === 0) {
+      try {
+        // Check for data attributes that might contain post information
+        const postData = postElement.getAttribute('data-post');
+        
+        if (postData) {
+          console.log("Found data-post attribute");
+          const parsedData = JSON.parse(postData);
+          
+          if (parsedData && parsedData.permalink) {
+            const fullUrl = `https://www.reddit.com${parsedData.permalink}.json`;
+            console.log("Constructed URL from data attribute:", fullUrl);
+            mediaUrls.push({
+              url: fullUrl,
+              type: 'reddit-video',
+              filename: 'reddit_video_' + Date.now() + '.mp4'
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Error parsing post data:", e);
+      }
+    }
+    
+    // If still no media found, try to use an attribute that might contain the post ID
+    if (mediaUrls.length === 0) {
+      // Try various attributes that might contain the post ID
+      const postId = postElement.getAttribute('id') || 
+                    postElement.getAttribute('data-post-id') || 
+                    postElement.getAttribute('data-postid');
+                    
+      if (postId) {
+        console.log("Found post ID from attribute:", postId);
+        const jsonUrl = `https://www.reddit.com/comments/${postId}.json`;
+        mediaUrls.push({
+          url: jsonUrl,
+          type: 'reddit-video',
+          filename: 'reddit_video_' + Date.now() + '.mp4'
+        });
+      }
+    }
+    
+    return mediaUrls;
+  }
+  
+  // If not a shadow DOM element, use regular DOM approach
   // Look for images
   const images = postElement.querySelectorAll('img:not([alt="User avatar"]):not([alt="Subreddit icon"]):not([alt="User profile picture"])');
+  console.log(`Found ${images.length} images in regular DOM`);
+  
   images.forEach(img => {
     // Skip small icons and UI elements
     if (img.width > 100 && img.height > 100) {
+      console.log("Found image in regular DOM:", img.src);
+      
       // Get highest quality version by removing resolution modifiers
       let url = img.src;
       
       // Improve image URLs to get highest quality
-      // Remove size restrictions from URLs
       url = url.replace(/\?.*$/, ''); // Remove query parameters
       
       // Improve imgur links
@@ -374,16 +643,18 @@ function extractMediaFromPost(postElement) {
   
   // Look for videos
   const videos = postElement.querySelectorAll('video');
+  console.log(`Found ${videos.length} videos in regular DOM`);
+  
   videos.forEach(video => {
     // Try to get source elements
     const sources = video.querySelectorAll('source');
     if (sources.length > 0) {
-      // Use the first source (usually highest quality)
+      console.log("Found video source in regular DOM:", sources[0].src);
       let url = sources[0].src;
       url = url.replace(/\?.*$/, ''); // Remove query parameters
       mediaUrls.push({url, type: 'video', filename: getFilenameFromUrl(url)});
     } else if (video.src) {
-      // If no source elements, try the video src directly
+      console.log("Found video src in regular DOM:", video.src);
       let url = video.src;
       url = url.replace(/\?.*$/, ''); // Remove query parameters
       mediaUrls.push({url, type: 'video', filename: getFilenameFromUrl(url)});
@@ -392,6 +663,8 @@ function extractMediaFromPost(postElement) {
   
   // Look for video poster frames that might indicate videos (DASH/HLS)
   const videoPosters = postElement.querySelectorAll('video[poster]');
+  console.log(`Found ${videoPosters.length} video posters in regular DOM`);
+  
   videoPosters.forEach(video => {
     // Skip if we already have the video from sources
     if (video.querySelector('source')) return;
@@ -399,6 +672,7 @@ function extractMediaFromPost(postElement) {
     // Check for Reddit's video player
     const postUrl = findPostUrl(postElement);
     if (postUrl && postUrl.includes('/comments/')) {
+      console.log("Found post URL for video:", postUrl);
       mediaUrls.push({
         url: postUrl + '.json',
         type: 'reddit-video',
@@ -412,24 +686,13 @@ function extractMediaFromPost(postElement) {
   links.forEach(link => {
     const href = link.href;
     if (href.match(/\.(gif|gifv)$/i)) {
+      console.log("Found gif link:", href);
       // Convert gifv links to mp4 for imgur
       let url = href;
       if (url.endsWith('.gifv') && url.includes('imgur.com')) {
         url = url.replace('.gifv', '.mp4');
       }
       mediaUrls.push({url, type: 'gif', filename: getFilenameFromUrl(url)});
-    }
-  });
-  
-  // Look for embeds (for YouTube, Twitter, etc.)
-  const iframes = postElement.querySelectorAll('iframe');
-  iframes.forEach(iframe => {
-    const src = iframe.src;
-    if (src.includes('youtube.com/embed/') || src.includes('youtu.be/')) {
-      // YouTube embed - we'll just note it
-      console.log("Found YouTube embed, but can't download: ", src);
-      // You could expand this to extract the YouTube video ID and add to mediaUrls
-      // if you want to handle this case in the background script
     }
   });
   
